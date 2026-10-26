@@ -1,11 +1,16 @@
-use std::{fs::{self, DirEntry, File, metadata}, io::Result, os::unix::fs::MetadataExt, path::PathBuf};
+use std::{
+    fs::{self},
+    io::Result,
+    os::unix::fs::MetadataExt,
+    path::PathBuf,
+};
 
 #[derive(Default)]
 struct Folder {
     dir: PathBuf,
     folders: Vec<Folder>,
     files: Vec<PathBuf>,
-    size: u64
+    size: u64,
 }
 
 impl Folder {
@@ -14,7 +19,7 @@ impl Folder {
             dir,
             folders: vec![],
             files: vec![],
-            size: 0
+            size: 0,
         }
     }
 
@@ -24,30 +29,28 @@ impl Folder {
         match files {
             Ok(files) => {
                 for file in files {
-                let entry = file?;
-                let md = entry.metadata()?;
+                    let entry = file?;
+                    let md = entry.metadata()?;
 
-                if md.is_file() {
-                    self.size += md.size();
-                    self.files.push(entry.path());
+                    if md.is_file() {
+                        self.size += md.size();
+                        self.files.push(entry.path());
+                    } else if md.is_dir() {
+                        let mut folder = Folder::new(entry.path());
+                        self.size += folder.size_cal()?;
+                        self.folders.push(folder);
+                    }
                 }
-                else if md.is_dir() {
-                    let mut folder = Folder::new(entry.path());
-                    self.size += folder.size_cal()?;
-                    self.folders.push(folder);
-                }
-        }
-            },
+            }
             Err(e) => {
-                eprintln!("Error: Could not read dir: {} {}", e,  self.dir.display().to_string())
+                eprintln!("Error: Could not read dir: {} {}", e, self.dir.display())
             }
         }
 
         Ok(self.size)
     }
 
-    fn print(mut self, depth: usize, limit: usize) -> Result<()>{
-
+    fn print(mut self, depth: usize, limit: usize) -> Result<()> {
         if limit < depth {
             return Ok(());
         }
@@ -62,12 +65,11 @@ impl Folder {
         //     let output = "-".repeat(depth+1) + " " + &name;
         //     println!("{output}");
         // }
-        
 
-        self.folders.sort_by(|a, b| b.size.cmp(&a.size));
+        self.folders.sort_by_key(|f| std::cmp::Reverse(f.size));
 
         for folder in self.folders {
-            folder.print(depth+1, limit);
+            _ = folder.print(depth + 1, limit);
         }
         Ok(())
     }
@@ -75,15 +77,13 @@ impl Folder {
 
 #[derive(Default)]
 pub struct SpaceDeck {
-    head: Folder
+    head: Folder,
 }
 
 impl SpaceDeck {
     pub fn new(dir: PathBuf) -> Self {
         let head = Folder::new(dir);
-        Self {
-            head,
-        }
+        Self { head }
     }
 
     pub fn size_cal(&mut self) -> Result<u64> {
@@ -91,7 +91,6 @@ impl SpaceDeck {
     }
 
     pub fn print(self, limit: usize) {
-        self.head.print(0, limit);
+        _ = self.head.print(0, limit);
     }
 }
-

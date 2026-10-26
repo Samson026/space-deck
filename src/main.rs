@@ -1,21 +1,13 @@
-use std::{env::current_dir, io::Result};
+#![allow(dead_code)]
 
-use crossterm::terminal;
+use std::io::Result;
 
-use crate::{deck::SpaceDeck, tui::App};
+use crate::tui::App;
 
 mod deck;
 mod tui;
 
-fn main() -> Result<()>{
-    let dir = current_dir()?;
-    let mut deck = SpaceDeck::new(dir);
-
-    // match deck.size_cal() {
-    //     Ok(size) => deck.print(1),
-    //     Err(e) => eprintln!("Error: {e}")
-    // }
-
+fn main() -> Result<()> {
     ratatui::run(|terminal| App::default().run(terminal))?;
 
     Ok(())
