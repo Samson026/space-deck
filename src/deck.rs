@@ -1,5 +1,6 @@
 use std::{fs::{self, DirEntry, File, metadata}, io::Result, os::unix::fs::MetadataExt, path::PathBuf};
 
+#[derive(Default)]
 struct Folder {
     dir: PathBuf,
     folders: Vec<Folder>,
@@ -72,6 +73,7 @@ impl Folder {
     }
 }
 
+#[derive(Default)]
 pub struct SpaceDeck {
     head: Folder
 }
