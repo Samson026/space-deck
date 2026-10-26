@@ -3,7 +3,7 @@ use std::{fs::{self, DirEntry, File, metadata}, io::Result, os::unix::fs::Metada
 struct Folder {
     dir: PathBuf,
     folders: Vec<Folder>,
-    files: Vec<DirEntry>,
+    files: Vec<PathBuf>,
     size: u64
 }
 
@@ -28,7 +28,7 @@ impl Folder {
 
                 if md.is_file() {
                     self.size += md.size();
-                    self.files.push(entry);
+                    self.files.push(entry.path());
                 }
                 else if md.is_dir() {
                     let mut folder = Folder::new(entry.path());
@@ -38,20 +38,23 @@ impl Folder {
         }
             },
             Err(e) => {
-                eprintln!("Error: Could not read dir")
+                eprintln!("Error: Could not read dir: {} {}", e,  self.dir.display().to_string())
             }
         }
 
         Ok(self.size)
     }
 
-    fn print(self, depth: usize) -> Result<()>{
+    fn print(mut self, depth: usize, limit: usize) -> Result<()>{
+
+        if limit < depth {
+            return Ok(());
+        }
+
         if let Some(file) = self.dir.file_name() {
             let d = "-".repeat(depth) + &file.to_string_lossy() + ": " + &self.size.to_string();
             println!("{d}");
         }
-
-        
 
         // for entry in self.files {
         //     let name = entry.file_name().to_string_lossy().into_owned();
@@ -60,8 +63,10 @@ impl Folder {
         // }
         
 
+        self.folders.sort_by(|a, b| b.size.cmp(&a.size));
+
         for folder in self.folders {
-            folder.print(depth+2);
+            folder.print(depth+1, limit);
         }
         Ok(())
     }
@@ -83,8 +88,8 @@ impl SpaceDeck {
         self.head.size_cal()
     }
 
-    pub fn print(self) {
-        self.head.print(0);
+    pub fn print(self, limit: usize) {
+        self.head.print(0, limit);
     }
 }
 

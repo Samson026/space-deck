@@ -9,7 +9,7 @@ fn main() -> Result<()>{
     let mut deck = SpaceDeck::new(dir);
 
     match deck.size_cal() {
-        Ok(size) => deck.print(),
+        Ok(size) => deck.print(2),
         Err(e) => eprintln!("Error: {e}")
     }
 
