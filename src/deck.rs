@@ -6,11 +6,11 @@ use std::{
 };
 
 #[derive(Default)]
-struct Folder {
-    dir: PathBuf,
-    folders: Vec<Folder>,
-    files: Vec<PathBuf>,
-    size: u64,
+pub struct Folder {
+    pub dir: PathBuf,
+    pub folders: Vec<Folder>,
+    pub files: Vec<PathBuf>,
+    pub size: u64,
 }
 
 impl Folder {
@@ -77,7 +77,7 @@ impl Folder {
 
 #[derive(Default)]
 pub struct SpaceDeck {
-    head: Folder,
+    pub head: Folder,
 }
 
 impl SpaceDeck {

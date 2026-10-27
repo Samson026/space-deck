@@ -8,7 +8,9 @@ mod deck;
 mod tui;
 
 fn main() -> Result<()> {
-    ratatui::run(|terminal| App::default().run(terminal))?;
+    let mut app = App::new();
+
+    ratatui::run(|terminal| app.run(terminal))?;
 
     Ok(())
 }
