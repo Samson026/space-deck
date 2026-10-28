@@ -1,8 +1,5 @@
 use std::{
-    fs::{self},
-    io::Result,
-    os::unix::fs::MetadataExt,
-    path::PathBuf,
+    fs::{self}, io::Result, os::unix::fs::MetadataExt, path::PathBuf, sync::{Arc, Mutex}, thread,
 };
 
 #[derive(Default)]
@@ -28,19 +25,26 @@ impl Folder {
 
         match files {
             Ok(files) => {
+                let handlers = vec![];
                 for file in files {
                     let entry = file?;
                     let md = entry.metadata()?;
 
                     if md.is_file() {
-                        self.size += md.size();
+    
+                        *s += md.size();
                         self.files.push(entry.path());
                     } else if md.is_dir() {
-                        let mut folder = Folder::new(entry.path());
-                        self.size += folder.size_cal()?;
-                        self.folders.push(folder);
+                        let size_clone = Arc::clone(&self.size);
+                        handlers.push(thread::spawn(move|| -> Result<Folder> {
+                            let mut folder = Folder::new(entry.path());
+                            folder.size_cal()?;
+                            Ok(folder)
+                        }))
                     }
                 }
+                
+                
             }
             Err(e) => {
                 eprintln!("Error: Could not read dir: {} {}", e, self.dir.display())
