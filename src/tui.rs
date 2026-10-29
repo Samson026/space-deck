@@ -4,7 +4,7 @@ use crossterm::event::{self, Event, KeyCode, KeyEventKind};
 use ratatui::{
     DefaultTerminal, Frame,
     layout::{Alignment, Constraint, Layout, Rect},
-    style::Style,
+    style::{Color, Style},
     widgets::Block,
 };
 
@@ -14,6 +14,23 @@ use crate::deck::SpaceDeck;
 pub struct App {
     exit: bool,
     space_deck: SpaceDeck,
+}
+
+const COLOURS: [Color; 10] = [
+    Color::Blue,
+    Color::Red,
+    Color::Green,
+    Color::Yellow,
+    Color::Magenta,
+    Color::Cyan,
+    Color::LightBlue,
+    Color::LightRed,
+    Color::LightGreen,
+    Color::LightMagenta,
+];
+
+fn get_colour(i: usize) -> Color {
+    COLOURS[i % COLOURS.len()]
 }
 
 impl App {
@@ -74,13 +91,18 @@ impl App {
             .iter()
             .map(|folder| {
                 let weight = ((folder.size.max(1) * 1000 / total) as u16).max(1);
+
                 Constraint::Fill(weight)
             })
             .collect();
 
         let cols = Layout::horizontal(constraints).split(area);
 
-        for (col, folder) in cols.iter().zip(self.space_deck.head.folders.iter()) {
+        for (i, (col, folder)) in cols
+            .iter()
+            .zip(self.space_deck.head.folders.iter())
+            .enumerate()
+        {
             let title = folder.dir.file_name().unwrap_or_default().to_string_lossy();
             let border = Block::bordered().title(title);
             let inner = border.inner(*col);
@@ -89,7 +111,7 @@ impl App {
 
             frame
                 .buffer_mut()
-                .set_style(inner, Style::new().bg(ratatui::style::Color::Blue));
+                .set_style(inner, Style::new().bg(get_colour(i)));
         }
     }
 
