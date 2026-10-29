@@ -5,7 +5,10 @@ use crossterm::event::{self, Event, KeyCode, KeyEventKind};
 use ratatui::{
     DefaultTerminal, Frame,
     layout::{Alignment, Constraint, Layout, Rect},
-    style::{Color, Style},
+    style::{
+        Color::{self, Green},
+        Style,
+    },
     text::Text,
     widgets::Block,
 };
@@ -16,6 +19,7 @@ use crate::deck::SpaceDeck;
 pub struct App {
     exit: bool,
     space_deck: SpaceDeck,
+    cursur: usize,
 }
 
 const COLOURS: [Color; 10] = [
@@ -52,6 +56,7 @@ impl App {
                 Self {
                     exit: false,
                     space_deck: sd,
+                    cursur: 0,
                 }
             }
             Err(e) => {
@@ -69,6 +74,29 @@ impl App {
         Ok(())
     }
 
+    fn move_cursor(&mut self, down: bool) {
+        if down {
+            if self.cursur == self.space_deck.head.folders.len() - 1 {
+                self.cursur = 0
+            } else {
+                self.cursur += 1
+            }
+        } else {
+            if self.cursur == 0 {
+                return;
+            }
+            self.cursur -= 1
+        }
+    }
+
+    fn enter_dir(&mut self) {
+        self.space_deck.pointer.push(self.cursur);
+    }
+
+    fn exit_dir(&mut self) {
+        self.space_deck.pointer.pop();
+    }
+
     fn draw(&self, frame: &mut Frame) {
         let area = frame.area();
 
@@ -84,11 +112,12 @@ impl App {
     }
 
     fn draw_allocation(&self, frame: &mut Frame, area: Rect) {
-        let total = self.space_deck.head.size.max(1);
+        let total = self.space_deck.current_folder().unwrap().size.max(1);
 
         let constraints: Vec<Constraint> = self
             .space_deck
-            .head
+            .current_folder()
+            .unwrap()
             .folders
             .iter()
             .map(|folder| {
@@ -102,11 +131,16 @@ impl App {
 
         for (i, (col, folder)) in cols
             .iter()
-            .zip(self.space_deck.head.folders.iter())
+            .zip(self.space_deck.current_folder().unwrap().folders.iter())
             .enumerate()
         {
             let title = folder.dir.file_name().unwrap_or_default().to_string_lossy();
-            let border = Block::bordered().title(title);
+            let mut border = Block::bordered().title(title);
+
+            if i == self.cursur {
+                border = border.border_style(Style::new().fg(Green));
+            }
+
             let inner = border.inner(*col);
 
             frame.render_widget(border, *col);
@@ -124,10 +158,15 @@ impl App {
 
     fn handle_events(&mut self) -> Result<()> {
         match event::read()? {
-            Event::Key(key_event)
-                if key_event.kind == KeyEventKind::Press && key_event.code == KeyCode::Esc =>
-            {
-                self.exit = true
+            Event::Key(key_event) if key_event.kind == KeyEventKind::Press => {
+                match key_event.code {
+                    KeyCode::Esc => self.exit = true,
+                    KeyCode::Down => self.move_cursor(true),
+                    KeyCode::Up => self.move_cursor(false),
+                    KeyCode::Enter => self.enter_dir(),
+                    KeyCode::Backspace => self.exit_dir(),
+                    _ => {}
+                }
             }
             _ => {}
         }

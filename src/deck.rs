@@ -96,20 +96,35 @@ impl Folder {
 #[derive(Default)]
 pub struct SpaceDeck {
     pub head: Folder,
+    pub pointer: Vec<usize>,
 }
 
 impl SpaceDeck {
     pub fn new(dir: PathBuf) -> Self {
         let head = Folder::new(dir);
-        Self { head }
+        Self {
+            head,
+            pointer: vec![],
+        }
     }
 
     pub fn size_cal(&mut self) -> Result<u64> {
         self.head.size_cal(false)?;
+        self.head.folders.sort_by_key(|f| std::cmp::Reverse(f.size));
         Ok(self.head.size)
     }
 
     pub fn print(self, limit: usize) {
         _ = self.head.print(0, limit);
+    }
+
+    pub fn current_folder(&self) -> Option<&Folder> {
+        let mut current_folder = &self.head;
+
+        for &index in &self.pointer {
+            current_folder = current_folder.folders.get(index)?;
+        }
+
+        Some(current_folder)
     }
 }
