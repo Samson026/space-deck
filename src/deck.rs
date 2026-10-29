@@ -3,8 +3,10 @@ use std::{
     io::Result,
     os::unix::fs::MetadataExt,
     path::PathBuf,
-    thread,
+    sync::{LazyLock, mpsc::channel},
 };
+
+use threadpool::ThreadPool;
 
 #[derive(Default)]
 pub struct Folder {
@@ -13,6 +15,8 @@ pub struct Folder {
     pub files: Vec<PathBuf>,
     pub size: u64,
 }
+
+static POOL: LazyLock<ThreadPool> = LazyLock::new(|| ThreadPool::new(10));
 
 impl Folder {
     fn new(dir: PathBuf) -> Self {
@@ -24,12 +28,12 @@ impl Folder {
         }
     }
 
-    fn size_cal(&mut self) -> Result<u64> {
+    fn size_cal(&mut self, child: bool) -> Result<u64> {
         let files = fs::read_dir(&self.dir);
 
         match files {
             Ok(files) => {
-                let mut handlers = vec![];
+                let (tx, rx) = channel();
                 for file in files {
                     let entry = file?;
                     let md = entry.metadata()?;
@@ -39,18 +43,27 @@ impl Folder {
                         self.files.push(entry.path());
                     } else if md.is_dir() {
                         // let size_clone = Arc::clone(self.size);
-                        handlers.push(thread::spawn(move || -> Result<Folder> {
+                        if !child {
+                            let tx = tx.clone();
+                            POOL.execute(move || {
+                                let mut folder = Folder::new(entry.path());
+                                _ = folder.size_cal(true);
+                                _ = tx.send(folder);
+                            })
+                        } else {
                             let mut folder = Folder::new(entry.path());
-                            folder.size_cal()?;
-                            Ok(folder)
-                        }))
+                            self.size += folder.size_cal(true)?;
+                            self.folders.push(folder);
+                        }
                     }
                 }
 
-                for handler in handlers {
-                    let folder = handler.join().expect("worker panicked")?;
-                    self.size += folder.size;
-                    self.folders.push(folder);
+                if !child {
+                    drop(tx);
+                    for folder in rx.iter() {
+                        self.size += folder.size;
+                        self.folders.push(folder);
+                    }
                 }
             }
             Err(e) => {
@@ -98,7 +111,8 @@ impl SpaceDeck {
     }
 
     pub fn size_cal(&mut self) -> Result<u64> {
-        self.head.size_cal()
+        self.head.size_cal(false)?;
+        Ok(self.head.size)
     }
 
     pub fn print(self, limit: usize) {
