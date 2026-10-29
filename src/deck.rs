@@ -1,5 +1,9 @@
 use std::{
-    fs::{self}, io::Result, os::unix::fs::MetadataExt, path::PathBuf, sync::{Arc, Mutex}, thread,
+    fs::{self},
+    io::Result,
+    os::unix::fs::MetadataExt,
+    path::PathBuf,
+    thread,
 };
 
 #[derive(Default)]
@@ -25,26 +29,29 @@ impl Folder {
 
         match files {
             Ok(files) => {
-                let handlers = vec![];
+                let mut handlers = vec![];
                 for file in files {
                     let entry = file?;
                     let md = entry.metadata()?;
 
                     if md.is_file() {
-    
-                        *s += md.size();
+                        self.size += md.size();
                         self.files.push(entry.path());
                     } else if md.is_dir() {
-                        let size_clone = Arc::clone(&self.size);
-                        handlers.push(thread::spawn(move|| -> Result<Folder> {
+                        // let size_clone = Arc::clone(self.size);
+                        handlers.push(thread::spawn(move || -> Result<Folder> {
                             let mut folder = Folder::new(entry.path());
                             folder.size_cal()?;
                             Ok(folder)
                         }))
                     }
                 }
-                
-                
+
+                for handler in handlers {
+                    let folder = handler.join().expect("worker panicked")?;
+                    self.size += folder.size;
+                    self.folders.push(folder);
+                }
             }
             Err(e) => {
                 eprintln!("Error: Could not read dir: {} {}", e, self.dir.display())
