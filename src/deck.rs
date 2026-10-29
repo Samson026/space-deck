@@ -91,6 +91,10 @@ impl Folder {
         }
         Ok(())
     }
+
+    pub fn sort(&mut self) {
+        self.folders.sort_by_key(|f| std::cmp::Reverse(f.size));
+    }
 }
 
 #[derive(Default)]
@@ -126,5 +130,14 @@ impl SpaceDeck {
         }
 
         Some(current_folder)
+    }
+
+    pub fn current_folder_mut(&mut self) -> Option<&mut Folder> {
+        let mut current = &mut self.head;
+
+        for &index in &self.pointer {
+            current = current.folders.get_mut(index)?
+        }
+        Some(current)
     }
 }

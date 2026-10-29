@@ -91,6 +91,7 @@ impl App {
 
     fn enter_dir(&mut self) {
         self.space_deck.pointer.push(self.cursur);
+        self.space_deck.current_folder_mut().unwrap().sort();
     }
 
     fn exit_dir(&mut self) {
