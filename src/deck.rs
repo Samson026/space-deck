@@ -84,12 +84,6 @@ impl Folder {
             println!("{d}");
         }
 
-        // for entry in self.files {
-        //     let name = entry.file_name().to_string_lossy().into_owned();
-        //     let output = "-".repeat(depth+1) + " " + &name;
-        //     println!("{output}");
-        // }
-
         self.folders.sort_by_key(|f| std::cmp::Reverse(f.size));
 
         for folder in self.folders {

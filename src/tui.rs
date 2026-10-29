@@ -1,10 +1,12 @@
 use std::{env, io::Result};
 
+use bytesize::ByteSize;
 use crossterm::event::{self, Event, KeyCode, KeyEventKind};
 use ratatui::{
     DefaultTerminal, Frame,
     layout::{Alignment, Constraint, Layout, Rect},
     style::{Color, Style},
+    text::Text,
     widgets::Block,
 };
 
@@ -96,7 +98,7 @@ impl App {
             })
             .collect();
 
-        let cols = Layout::horizontal(constraints).split(area);
+        let cols = Layout::vertical(constraints).split(area);
 
         for (i, (col, folder)) in cols
             .iter()
@@ -112,6 +114,11 @@ impl App {
             frame
                 .buffer_mut()
                 .set_style(inner, Style::new().bg(get_colour(i)));
+
+            let size = ByteSize::b(folder.size).display().to_string();
+            let size_text = Text::from(size).centered();
+
+            frame.render_widget(size_text, inner);
         }
     }
 
