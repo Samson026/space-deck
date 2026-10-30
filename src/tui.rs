@@ -120,6 +120,20 @@ impl App {
     }
 
     fn draw_allocation(&self, frame: &mut Frame, area: Rect) {
+        let [header, body] =
+            Layout::vertical([Constraint::Length(1), Constraint::Min(0)]).areas(area);
+
+        let header_text = Text::from(
+            self.space_deck
+                .current_folder()
+                .unwrap()
+                .dir
+                .display()
+                .to_string(),
+        );
+
+        frame.render_widget(header_text, header);
+
         let total = self.space_deck.current_folder().unwrap().size.max(1);
 
         let constraints: Vec<Constraint> = self
@@ -141,7 +155,7 @@ impl App {
             })
             .collect();
 
-        let cols = Layout::vertical(constraints).split(area);
+        let cols = Layout::vertical(constraints).split(body);
 
         for (i, (col, folder)) in cols
             .iter()
