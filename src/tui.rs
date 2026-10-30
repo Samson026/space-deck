@@ -95,8 +95,8 @@ impl App {
             return;
         }
 
-        self.cursur = 0;
         self.space_deck.pointer.push(self.cursur);
+        self.cursur = 0;
         self.space_deck.current_folder_mut().unwrap().sort();
     }
 
@@ -131,7 +131,13 @@ impl App {
             .map(|folder| {
                 let weight = ((folder.size.max(1) * 1000 / total) as u16).max(1);
 
-                Constraint::Fill(weight)
+                let constraint: Constraint = if weight < 100 {
+                    Constraint::Min(1)
+                } else {
+                    Constraint::Fill(weight)
+                };
+
+                constraint
             })
             .collect();
 
