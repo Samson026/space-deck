@@ -11,8 +11,7 @@ use threadpool::ThreadPool;
 #[derive(Default)]
 pub struct Folder {
     pub dir: PathBuf,
-    pub folders: Vec<Folder>,
-    pub files: Vec<PathBuf>,
+    pub entries: Vec<Entry>,
     pub size: u64,
 }
 
@@ -22,8 +21,7 @@ impl Folder {
     fn new(dir: PathBuf) -> Self {
         Self {
             dir,
-            folders: vec![],
-            files: vec![],
+            entries: vec![],
             size: 0,
         }
     }
@@ -39,8 +37,10 @@ impl Folder {
                     let md = entry.metadata()?;
 
                     if md.is_file() {
-                        self.size += md.size();
-                        self.files.push(entry.path());
+                        let mut file = File::new(entry.path());
+                        file.size = md.size();
+                        self.size += file.size;
+                        self.entries.push(Entry::File(file));
                     } else if md.is_dir() {
                         // let size_clone = Arc::clone(self.size);
                         if !child {
@@ -53,7 +53,7 @@ impl Folder {
                         } else {
                             let mut folder = Folder::new(entry.path());
                             self.size += folder.size_cal(true)?;
-                            self.folders.push(folder);
+                            self.entries.push(Entry::Folder(folder));
                         }
                     }
                 }
@@ -62,7 +62,7 @@ impl Folder {
                     drop(tx);
                     for folder in rx.iter() {
                         self.size += folder.size;
-                        self.folders.push(folder);
+                        self.entries.push(Entry::Folder(folder));
                     }
                 }
             }
@@ -74,26 +74,33 @@ impl Folder {
         Ok(self.size)
     }
 
-    fn print(mut self, depth: usize, limit: usize) -> Result<()> {
-        if limit < depth {
-            return Ok(());
-        }
-
-        if let Some(file) = self.dir.file_name() {
-            let d = "-".repeat(depth) + &file.to_string_lossy() + ": " + &self.size.to_string();
-            println!("{d}");
-        }
-
-        self.folders.sort_by_key(|f| std::cmp::Reverse(f.size));
-
-        for folder in self.folders {
-            _ = folder.print(depth + 1, limit);
-        }
-        Ok(())
-    }
-
     pub fn sort(&mut self) {
-        self.folders.sort_by_key(|f| std::cmp::Reverse(f.size));
+        self.entries.sort_by_key(|f| std::cmp::Reverse(f.size()));
+    }
+}
+
+pub struct File {
+    pub dir: PathBuf,
+    pub size: u64,
+}
+
+impl File {
+    pub fn new(dir: PathBuf) -> Self {
+        Self { dir, size: 0 }
+    }
+}
+
+pub enum Entry {
+    Folder(Folder),
+    File(File),
+}
+
+impl Entry {
+    pub fn size(&self) -> u64 {
+        match self {
+            Entry::File(file) => file.size,
+            Entry::Folder(folder) => folder.size,
+        }
     }
 }
 
@@ -114,19 +121,20 @@ impl SpaceDeck {
 
     pub fn size_cal(&mut self) -> Result<u64> {
         self.head.size_cal(false)?;
-        self.head.folders.sort_by_key(|f| std::cmp::Reverse(f.size));
+        self.head
+            .entries
+            .sort_by_key(|f| std::cmp::Reverse(f.size()));
         Ok(self.head.size)
-    }
-
-    pub fn print(self, limit: usize) {
-        _ = self.head.print(0, limit);
     }
 
     pub fn current_folder(&self) -> Option<&Folder> {
         let mut current_folder = &self.head;
 
         for &index in &self.pointer {
-            current_folder = current_folder.folders.get(index)?;
+            current_folder = match current_folder.entries.get(index) {
+                Some(Entry::Folder(folder)) => folder,
+                _ => return None,
+            }
         }
 
         Some(current_folder)
@@ -136,7 +144,10 @@ impl SpaceDeck {
         let mut current = &mut self.head;
 
         for &index in &self.pointer {
-            current = current.folders.get_mut(index)?
+            current = match current.entries.get_mut(index) {
+                Some(Entry::Folder(folder)) => folder,
+                _ => return None,
+            }
         }
         Some(current)
     }

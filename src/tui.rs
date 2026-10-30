@@ -10,10 +10,10 @@ use ratatui::{
         Style,
     },
     text::Text,
-    widgets::Block,
+    widgets::{Block, Paragraph, Wrap},
 };
 
-use crate::deck::SpaceDeck;
+use crate::deck::{Entry, SpaceDeck};
 
 #[derive(Default)]
 pub struct App {
@@ -76,7 +76,7 @@ impl App {
 
     fn move_cursor(&mut self, down: bool) {
         if down {
-            if self.cursur == self.space_deck.current_folder().unwrap().folders.len() - 1 {
+            if self.cursur == self.space_deck.current_folder().unwrap().entries.len() - 1 {
                 self.cursur = 0
             } else {
                 self.cursur += 1
@@ -91,7 +91,19 @@ impl App {
 
     fn enter_dir(&mut self) {
         // ensure we dont enter a non existant dir
-        if self.space_deck.current_folder().unwrap().folders.is_empty() {
+        if self.space_deck.current_folder().unwrap().entries.is_empty() {
+            return;
+        }
+
+        // if file
+        if !matches!(
+            self.space_deck
+                .current_folder()
+                .unwrap()
+                .entries
+                .get(self.cursur),
+            Some(Entry::Folder(_))
+        ) {
             return;
         }
 
@@ -121,7 +133,7 @@ impl App {
 
     fn draw_allocation(&self, frame: &mut Frame, area: Rect) {
         let [header, body] =
-            Layout::vertical([Constraint::Length(1), Constraint::Min(0)]).areas(area);
+            Layout::vertical([Constraint::Length(2), Constraint::Min(0)]).areas(area);
 
         let header_text = Text::from(
             self.space_deck
@@ -132,7 +144,10 @@ impl App {
                 .to_string(),
         );
 
-        frame.render_widget(header_text, header);
+        frame.render_widget(
+            Paragraph::new(header_text).wrap(Wrap { trim: false }),
+            header,
+        );
 
         let total = self.space_deck.current_folder().unwrap().size.max(1);
 
@@ -140,10 +155,11 @@ impl App {
             .space_deck
             .current_folder()
             .unwrap()
-            .folders
+            .entries
             .iter()
-            .map(|folder| {
-                let weight = ((folder.size.max(1) * 1000 / total) as u16).max(1);
+            .take(20)
+            .map(|entry| {
+                let weight = ((entry.size().max(1) * 1000 / total) as u16).max(1);
 
                 let constraint: Constraint = if weight < 100 {
                     Constraint::Min(1)
@@ -157,13 +173,23 @@ impl App {
 
         let cols = Layout::vertical(constraints).split(body);
 
-        for (i, (col, folder)) in cols
+        for (i, (col, entry)) in cols
             .iter()
-            .zip(self.space_deck.current_folder().unwrap().folders.iter())
+            .zip(self.space_deck.current_folder().unwrap().entries.iter())
             .enumerate()
         {
-            let title = folder.dir.file_name().unwrap_or_default().to_string_lossy();
-            let mut border = Block::bordered().title(title);
+            let mut border: Block;
+            match entry {
+                Entry::Folder(folder) => {
+                    let title = folder.dir.file_name().unwrap_or_default().to_string_lossy();
+                    border = Block::bordered().title(title);
+                }
+                Entry::File(file) => {
+                    let title =
+                        file.dir.file_name().unwrap_or_default().to_string_lossy() + " - File";
+                    border = Block::bordered().title(title);
+                }
+            }
 
             if i == self.cursur {
                 border = border.border_style(Style::new().fg(Green));
@@ -177,7 +203,7 @@ impl App {
                 .buffer_mut()
                 .set_style(inner, Style::new().bg(get_colour(i)));
 
-            let size = ByteSize::b(folder.size).display().to_string();
+            let size = ByteSize::b(entry.size()).display().to_string();
             let size_text = Text::from(size).centered();
 
             frame.render_widget(size_text, inner);
