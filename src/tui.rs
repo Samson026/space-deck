@@ -76,7 +76,7 @@ impl App {
 
     fn move_cursor(&mut self, down: bool) {
         if down {
-            if self.cursur == self.space_deck.head.folders.len() - 1 {
+            if self.cursur == self.space_deck.current_folder().unwrap().folders.len() - 1 {
                 self.cursur = 0
             } else {
                 self.cursur += 1
@@ -90,12 +90,19 @@ impl App {
     }
 
     fn enter_dir(&mut self) {
+        // ensure we dont enter a non existant dir
+        if self.space_deck.current_folder().unwrap().folders.is_empty() {
+            return;
+        }
+
+        self.cursur = 0;
         self.space_deck.pointer.push(self.cursur);
         self.space_deck.current_folder_mut().unwrap().sort();
     }
 
     fn exit_dir(&mut self) {
         self.space_deck.pointer.pop();
+        self.cursur = 0;
     }
 
     fn draw(&self, frame: &mut Frame) {
