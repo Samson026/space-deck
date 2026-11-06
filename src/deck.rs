@@ -65,7 +65,7 @@ impl Folder {
                             let new_progress = Arc::clone(&self.progress);
                             let mut folder = Folder::new(entry.path(), new_progress);
                             self.size += folder.size_cal(true)?;
-                            // self.entries.push(Entry::Folder(folder));
+                            self.entries.push(Entry::Folder(folder));
                         }
                     }
                 }
