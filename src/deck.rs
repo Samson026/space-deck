@@ -3,26 +3,30 @@ use std::{
     io::Result,
     os::unix::fs::MetadataExt,
     path::PathBuf,
-    sync::{LazyLock, mpsc::channel},
+    sync::{Arc, LazyLock, RwLock, mpsc::channel},
 };
 
 use threadpool::ThreadPool;
+
+use crate::progress::Progress;
 
 #[derive(Default)]
 pub struct Folder {
     pub dir: PathBuf,
     pub entries: Vec<Entry>,
     pub size: u64,
+    pub progress: Arc<RwLock<Progress>>,
 }
 
 static POOL: LazyLock<ThreadPool> = LazyLock::new(|| ThreadPool::new(10));
 
 impl Folder {
-    fn new(dir: PathBuf) -> Self {
+    fn new(dir: PathBuf, progress: Arc<RwLock<Progress>>) -> Self {
         Self {
             dir,
             entries: vec![],
             size: 0,
+            progress,
         }
     }
 
@@ -40,20 +44,28 @@ impl Folder {
                         let mut file = File::new(entry.path());
                         file.size = md.size();
                         self.size += file.size;
+                        self.progress
+                            .write()
+                            .unwrap()
+                            .errors
+                            .push(format!("Info: read dir: {}", file.dir.display()));
+                        self.progress.write().unwrap().progress += file.size;
                         self.entries.push(Entry::File(file));
                     } else if md.is_dir() {
                         // let size_clone = Arc::clone(self.size);
                         if !child {
                             let tx = tx.clone();
+                            let new_progress = Arc::clone(&self.progress);
                             POOL.execute(move || {
-                                let mut folder = Folder::new(entry.path());
+                                let mut folder = Folder::new(entry.path(), new_progress);
                                 _ = folder.size_cal(true);
                                 _ = tx.send(folder);
                             })
                         } else {
-                            let mut folder = Folder::new(entry.path());
+                            let new_progress = Arc::clone(&self.progress);
+                            let mut folder = Folder::new(entry.path(), new_progress);
                             self.size += folder.size_cal(true)?;
-                            self.entries.push(Entry::Folder(folder));
+                            // self.entries.push(Entry::Folder(folder));
                         }
                     }
                 }
@@ -66,9 +78,11 @@ impl Folder {
                     }
                 }
             }
-            Err(e) => {
-                eprintln!("Error: Could not read dir: {} {}", e, self.dir.display())
-            }
+            Err(e) => self.progress.write().unwrap().errors.push(format!(
+                "Error: could not read dir: {} {}",
+                e,
+                self.dir.display()
+            )),
         }
 
         Ok(self.size)
@@ -108,19 +122,31 @@ impl Entry {
 pub struct SpaceDeck {
     pub head: Folder,
     pub pointer: Vec<usize>,
+    pub reading: bool,
+    progress: Arc<RwLock<Progress>>,
 }
 
 impl SpaceDeck {
-    pub fn new(dir: PathBuf) -> Self {
-        let head = Folder::new(dir);
+    pub fn new(dir: PathBuf, progress: Arc<RwLock<Progress>>) -> Self {
+        let new_progress = Arc::clone(&progress);
+        let head = Folder::new(dir, new_progress);
+
+        progress.write().unwrap().total = head.dir.metadata().unwrap().size();
+
         Self {
             head,
             pointer: vec![],
+            reading: false,
+            progress,
         }
     }
 
     pub fn size_cal(&mut self) -> Result<u64> {
-        self.head.size_cal(false)?;
+        self.reading = true;
+        let result = self.head.size_cal(false);
+        self.reading = false;
+
+        result?;
         self.head
             .entries
             .sort_by_key(|f| std::cmp::Reverse(f.size()));
