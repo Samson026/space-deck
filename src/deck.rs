@@ -4,9 +4,13 @@ use std::{
     os::unix::fs::MetadataExt,
     path::PathBuf,
     sync::{Arc, LazyLock, RwLock, mpsc::channel},
+    time::Duration,
 };
 
-use threadpool::ThreadPool;
+use threadpool_executor::{
+    ThreadPool,
+    threadpool::{Builder, ExceedLimitPolicy},
+};
 
 use crate::progress::Progress;
 
@@ -18,7 +22,14 @@ pub struct Folder {
     pub progress: Arc<RwLock<Progress>>,
 }
 
-static POOL: LazyLock<ThreadPool> = LazyLock::new(|| ThreadPool::new(10));
+static POOL: LazyLock<ThreadPool> = LazyLock::new(|| {
+    Builder::new()
+        .core_pool_size(4)
+        .maximum_pool_size(30)
+        .keep_alive_time(Duration::from_secs(10))
+        .exeed_limit_policy(ExceedLimitPolicy::Reject)
+        .build()
+});
 
 impl Folder {
     fn new(dir: PathBuf, progress: Arc<RwLock<Progress>>) -> Self {
@@ -30,7 +41,7 @@ impl Folder {
         }
     }
 
-    fn size_cal(&mut self, child: bool) -> Result<u64> {
+    fn size_cal(&mut self) -> Result<u64> {
         let files = fs::read_dir(&self.dir);
 
         match files {
@@ -53,29 +64,30 @@ impl Folder {
                         self.entries.push(Entry::File(file));
                     } else if md.is_dir() {
                         // let size_clone = Arc::clone(self.size);
-                        if !child {
-                            let tx = tx.clone();
-                            let new_progress = Arc::clone(&self.progress);
-                            POOL.execute(move || {
-                                let mut folder = Folder::new(entry.path(), new_progress);
-                                _ = folder.size_cal(true);
+
+                        let tx = tx.clone();
+                        let new_progress = Arc::clone(&self.progress);
+                        let path = entry.path();
+                        if POOL
+                            .execute(move || {
+                                let mut folder = Folder::new(path, new_progress);
+                                _ = folder.size_cal();
                                 _ = tx.send(folder);
                             })
-                        } else {
+                            .is_err()
+                        {
                             let new_progress = Arc::clone(&self.progress);
                             let mut folder = Folder::new(entry.path(), new_progress);
-                            self.size += folder.size_cal(true)?;
-                            self.entries.push(Entry::Folder(folder));
+                            self.size += folder.size_cal()?;
+                            self.entries.push(Entry::Folder(folder))
                         }
                     }
                 }
 
-                if !child {
-                    drop(tx);
-                    for folder in rx.iter() {
-                        self.size += folder.size;
-                        self.entries.push(Entry::Folder(folder));
-                    }
+                drop(tx);
+                for folder in rx.iter() {
+                    self.size += folder.size;
+                    self.entries.push(Entry::Folder(folder));
                 }
             }
             Err(e) => self.progress.write().unwrap().errors.push(format!(
@@ -143,7 +155,7 @@ impl SpaceDeck {
 
     pub fn size_cal(&mut self) -> Result<u64> {
         self.reading = true;
-        let result = self.head.size_cal(false);
+        let result = self.head.size_cal();
         self.reading = false;
 
         result?;
