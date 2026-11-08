@@ -1,6 +1,8 @@
 use std::{
     env,
-    io::Result,
+    fs::remove_dir_all,
+    io::{Error, Result},
+    str::FromStr,
     sync::{Arc, RwLock},
     thread,
 };
@@ -15,7 +17,7 @@ use ratatui::{
         Style,
     },
     text::Text,
-    widgets::{Block, Paragraph, Wrap},
+    widgets::{Block, Clear, Paragraph, Wrap},
 };
 
 use crate::{
@@ -23,12 +25,37 @@ use crate::{
     progress::Progress,
 };
 
+enum Command {
+    Rm,
+}
+
+impl FromStr for Command {
+    type Err = Error;
+
+    fn from_str(s: &str) -> Result<Self> {
+        match s.to_lowercase().as_str() {
+            "rm" => Ok(Command::Rm),
+            _ => Err(Error::new(
+                std::io::ErrorKind::InvalidInput,
+                format!("Unknown command: {}", s),
+            )),
+        }
+    }
+}
+
+#[derive(Default)]
+struct State {
+    pop_up: Option<String>,
+}
+
 #[derive(Default)]
 pub struct App {
     exit: bool,
     pub space_deck: Arc<RwLock<SpaceDeck>>,
     cursur: usize,
     progress: Arc<RwLock<Progress>>,
+    input: String,
+    state: State,
 }
 
 const COLOURS: [Color; 10] = [
@@ -62,6 +89,8 @@ impl App {
                     space_deck: Arc::new(RwLock::new(sd)),
                     cursur: 0,
                     progress,
+                    input: String::new(),
+                    state: State::default(),
                 }
             }
             Err(e) => {
@@ -161,8 +190,12 @@ impl App {
     }
 
     fn draw_allocation(&self, frame: &mut Frame, area: Rect, deck: &SpaceDeck) {
-        let [header, body] =
-            Layout::vertical([Constraint::Length(2), Constraint::Min(0)]).areas(area);
+        let [header, body, footer] = Layout::vertical([
+            Constraint::Length(2),
+            Constraint::Min(0),
+            Constraint::Length(3),
+        ])
+        .areas(area);
 
         let header_text = Text::from(deck.current_folder().unwrap().dir.display().to_string());
 
@@ -228,6 +261,26 @@ impl App {
             let size_text = Text::from(size).centered();
 
             frame.render_widget(size_text, inner);
+
+            // render console
+            let input_block = Block::bordered();
+            let input_inner = input_block.inner(footer);
+
+            frame.render_widget(input_block, footer);
+            frame.render_widget(Text::from(self.input.to_string()), input_inner);
+
+            // render popup
+            if let Some(msg) = &self.state.pop_up {
+                let center = area.centered(Constraint::Percentage(60), Constraint::Percentage(20));
+                let pop_up = Block::bordered();
+                let pop_up_inner = pop_up.inner(center);
+                frame.render_widget(Clear, center);
+
+                frame.render_widget(pop_up, center);
+
+                let pop_up_text = Paragraph::new(String::from(msg)).centered();
+                frame.render_widget(pop_up_text, pop_up_inner);
+            }
         }
     }
 
@@ -273,6 +326,37 @@ impl App {
         }
     }
 
+    fn handle_command(&mut self, cmd: Command) {
+        match cmd {
+            Command::Rm => {
+                let mut deck = self.space_deck.write().unwrap();
+                let selected_folder = deck
+                    .current_folder()
+                    .unwrap()
+                    .entries
+                    .get(self.cursur)
+                    .unwrap();
+                let folder_name = selected_folder
+                    .dir()
+                    .file_name()
+                    .unwrap_or_default()
+                    .to_string_lossy()
+                    .into_owned();
+                _ = remove_dir_all(selected_folder.dir());
+                deck.current_folder_mut()
+                    .unwrap()
+                    .entries
+                    .remove(self.cursur);
+                drop(deck);
+
+                self.cursur = 0;
+
+                self.state.pop_up = Some(format!("Folder deleted: {folder_name}"));
+            }
+        }
+        self.input = String::new();
+    }
+
     fn handle_events(&mut self) -> Result<()> {
         if !event::poll(std::time::Duration::from_millis(100))? {
             return Ok(());
@@ -289,8 +373,18 @@ impl App {
                         KeyCode::Esc => self.exit = true,
                         KeyCode::Down => self.move_cursor(true),
                         KeyCode::Up => self.move_cursor(false),
-                        KeyCode::Enter => self.enter_dir(),
-                        KeyCode::Backspace => self.exit_dir(),
+                        KeyCode::Right => self.enter_dir(),
+                        KeyCode::Left => self.exit_dir(),
+                        KeyCode::Char(char) => self.input.push(char),
+                        KeyCode::Backspace => {
+                            self.input.pop();
+                        }
+                        KeyCode::Enter => match self.state.pop_up {
+                            Some(_) => self.state.pop_up = None,
+                            None => {
+                                self.handle_command(Command::from_str(&self.input).unwrap());
+                            }
+                        },
                         _ => {}
                     }
                 }

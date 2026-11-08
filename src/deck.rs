@@ -131,6 +131,13 @@ impl Entry {
             Entry::Folder(folder) => folder.size,
         }
     }
+
+    pub fn dir(&self) -> &PathBuf {
+        match self {
+            Entry::File(file) => &file.dir,
+            Entry::Folder(folder) => &folder.dir,
+        }
+    }
 }
 
 #[derive(Default)]
