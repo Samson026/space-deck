@@ -14,6 +14,9 @@ use threadpool_executor::{
 
 use crate::progress::Progress;
 
+const POOL_SIZE: i32 = 4;
+const MAX_POOL_SIZE: i32 = 16;
+
 #[derive(Default)]
 pub struct Folder {
     pub dir: PathBuf,
@@ -24,8 +27,8 @@ pub struct Folder {
 
 static POOL: LazyLock<ThreadPool> = LazyLock::new(|| {
     Builder::new()
-        .core_pool_size(4)
-        .maximum_pool_size(30)
+        .core_pool_size(1)
+        .maximum_pool_size(1)
         .keep_alive_time(Duration::from_secs(10))
         .exeed_limit_policy(ExceedLimitPolicy::Reject)
         .build()
